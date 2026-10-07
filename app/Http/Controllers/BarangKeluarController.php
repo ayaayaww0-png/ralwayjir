@@ -6,52 +6,47 @@ use App\Models\BarangKeluar;
 use App\Models\Barang;
 use App\Models\Ruangan;
 use App\Models\InventarisRuangan;
+use App\Models\Kategori;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
 class BarangKeluarController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
         $barangKeluars = BarangKeluar::with(['barang', 'ruangan'])->orderBy('tanggal', 'desc')->get();
         return view('barang_keluar.index', compact('barangKeluars'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
-        $barangs = Barang::all();
+        // Ambil hanya barang dari KIB B
+        $kategori = Kategori::where('nama_kategori', 'KIB B (Peralatan & Mesin)')->first();
+        $barangs = Barang::where('id_kategori', $kategori->id_kategori ?? 0)->get();
         $ruangans = Ruangan::all();
         return view('barang_keluar.create', compact('barangs', 'ruangans'));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         $request->validate([
             'tanggal' => 'required|date',
             'id_barang' => 'required|exists:barangs,id_barang',
             'id_ruangan' => 'required|exists:ruangans,id_ruangan',
-            'jumlah' => 'required|integer|min:1'
+            'jumlah' => 'required|integer|min:1',
+            'jenis_keluar' => 'required|in:rusak,hilang',
         ]);
 
-        // Cek stok di ruangan
-        $stokTersedia = InventarisRuangan::where([
+        // Cek stok BAIK di ruangan
+        $inventaris = InventarisRuangan::where([
             'id_barang' => $request->id_barang,
             'id_ruangan' => $request->id_ruangan,
-            'kondisi' => 'BAIK'
-        ])->sum('stok');
+        ])->first();
 
-        if ($stokTersedia < $request->jumlah) {
+        if (!$inventaris || $inventaris->stok_baik < $request->jumlah) {
+            $stokTersedia = $inventaris->stok_baik ?? 0;
             return redirect()->back()
-                ->with('error', 'Stok tidak mencukupi! Stok tersedia: ' . $stokTersedia)
+                ->with('error', "Stok BAIK tidak mencukupi! Stok tersedia: {$stokTersedia}")
                 ->withInput();
         }
 
@@ -60,31 +55,35 @@ class BarangKeluarController extends Controller
             'tanggal' => $request->tanggal,
             'id_barang' => $request->id_barang,
             'id_ruangan' => $request->id_ruangan,
-            'jumlah' => $request->jumlah
+            'jumlah' => $request->jumlah,
+            'jenis_keluar' => $request->jenis_keluar,
         ]);
 
-        // Update stok di inventaris ruangan (kurangi)
-        $this->updateInventarisRuangan($request->id_barang, $request->id_ruangan, $request->jumlah, 'keluar');
+        // Update stok inventaris
+        if ($request->jenis_keluar == 'rusak') {
+            $inventaris->stok_baik -= $request->jumlah;
+            $inventaris->stok_rusak += $request->jumlah;
+        } else { // hilang
+            $inventaris->stok_baik -= $request->jumlah;
+            $inventaris->stok_hilang += $request->jumlah;
+        }
 
-        // Update stok_total di tabel barang
+        if ($inventaris->stok_baik < 0) $inventaris->stok_baik = 0;
+        $inventaris->save();
+
+        // Update stok_total barang
         $this->updateStokTotal($request->id_barang);
 
         return redirect()->route('barang-keluar.index')
             ->with('success', 'Barang keluar berhasil dicatat!');
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show($id)
     {
         $barangKeluar = BarangKeluar::with(['barang', 'ruangan'])->findOrFail($id);
         return view('barang_keluar.show', compact('barangKeluar'));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit($id)
     {
         $barangKeluar = BarangKeluar::findOrFail($id);
@@ -93,133 +92,146 @@ class BarangKeluarController extends Controller
         return view('barang_keluar.edit', compact('barangKeluar', 'barangs', 'ruangans'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, $id)
     {
         $request->validate([
             'tanggal' => 'required|date',
             'id_barang' => 'required|exists:barangs,id_barang',
             'id_ruangan' => 'required|exists:ruangans,id_ruangan',
-            'jumlah' => 'required|integer|min:1'
+            'jumlah' => 'required|integer|min:1',
+            'jenis_keluar' => 'required|in:rusak,hilang',
         ]);
 
         $barangKeluar = BarangKeluar::findOrFail($id);
-        
-        // Simpan data lama untuk rollback
+
         $oldBarangId = $barangKeluar->id_barang;
         $oldRuanganId = $barangKeluar->id_ruangan;
         $oldJumlah = $barangKeluar->jumlah;
+        $oldJenis = $barangKeluar->jenis_keluar;
 
-        // Cek stok untuk update (jika berbeda)
-        if ($oldBarangId != $request->id_barang || $oldRuanganId != $request->id_ruangan || $oldJumlah != $request->jumlah) {
-            // Rollback stok lama (tambah kembali)
-            $this->updateInventarisRuangan($oldBarangId, $oldRuanganId, $oldJumlah, 'masuk');
+        // Rollback stok lama
+        $inventarisLama = InventarisRuangan::where([
+            'id_barang' => $oldBarangId,
+            'id_ruangan' => $oldRuanganId,
+        ])->first();
 
-            // Cek stok baru
-            $stokTersedia = InventarisRuangan::where([
-                'id_barang' => $request->id_barang,
-                'id_ruangan' => $request->id_ruangan,
-                'kondisi' => 'BAIK'
-            ])->sum('stok');
-
-            if ($stokTersedia < $request->jumlah) {
-                // Rollback lagi
-                $this->updateInventarisRuangan($oldBarangId, $oldRuanganId, $oldJumlah, 'keluar');
-                return redirect()->back()
-                    ->with('error', 'Stok tidak mencukupi! Stok tersedia: ' . $stokTersedia)
-                    ->withInput();
+        if ($inventarisLama) {
+            if ($oldJenis == 'rusak') {
+                $inventarisLama->stok_baik += $oldJumlah;
+                $inventarisLama->stok_rusak -= $oldJumlah;
+                if ($inventarisLama->stok_rusak < 0) $inventarisLama->stok_rusak = 0;
+            } else {
+                $inventarisLama->stok_baik += $oldJumlah;
+                $inventarisLama->stok_hilang -= $oldJumlah;
+                if ($inventarisLama->stok_hilang < 0) $inventarisLama->stok_hilang = 0;
             }
+            $inventarisLama->save();
+        }
 
-            // Update data
-            $barangKeluar->update([
-                'tanggal' => $request->tanggal,
-                'id_barang' => $request->id_barang,
-                'id_ruangan' => $request->id_ruangan,
-                'jumlah' => $request->jumlah
-            ]);
+        // Cek stok baru
+        $inventarisBaru = InventarisRuangan::where([
+            'id_barang' => $request->id_barang,
+            'id_ruangan' => $request->id_ruangan,
+        ])->first();
 
-            // Kurangi stok baru
-            $this->updateInventarisRuangan($request->id_barang, $request->id_ruangan, $request->jumlah, 'keluar');
+        if (!$inventarisBaru || $inventarisBaru->stok_baik < $request->jumlah) {
+            // Rollback lagi
+            $this->rollbackStok($oldBarangId, $oldRuanganId, $oldJumlah, $oldJenis);
+            $stokTersedia = $inventarisBaru->stok_baik ?? 0;
+            return redirect()->back()
+                ->with('error', "Stok BAIK tidak mencukupi! Stok tersedia: {$stokTersedia}")
+                ->withInput();
+        }
 
-            // Update stok_total kedua barang
-            $this->updateStokTotal($oldBarangId);
-            if ($oldBarangId != $request->id_barang) {
-                $this->updateStokTotal($request->id_barang);
-            }
+        // Update data
+        $barangKeluar->update([
+            'tanggal' => $request->tanggal,
+            'id_barang' => $request->id_barang,
+            'id_ruangan' => $request->id_ruangan,
+            'jumlah' => $request->jumlah,
+            'jenis_keluar' => $request->jenis_keluar,
+        ]);
+
+        // Update stok baru
+        if ($request->jenis_keluar == 'rusak') {
+            $inventarisBaru->stok_baik -= $request->jumlah;
+            $inventarisBaru->stok_rusak += $request->jumlah;
         } else {
-            // Update tanpa perubahan stok (hanya tanggal)
-            $barangKeluar->update([
-                'tanggal' => $request->tanggal
-            ]);
+            $inventarisBaru->stok_baik -= $request->jumlah;
+            $inventarisBaru->stok_hilang += $request->jumlah;
+        }
+
+        if ($inventarisBaru->stok_baik < 0) $inventarisBaru->stok_baik = 0;
+        $inventarisBaru->save();
+
+        // Update stok_total
+        $this->updateStokTotal($oldBarangId);
+        if ($oldBarangId != $request->id_barang) {
+            $this->updateStokTotal($request->id_barang);
         }
 
         return redirect()->route('barang-keluar.index')
             ->with('success', 'Barang keluar berhasil diupdate!');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy($id)
     {
         $barangKeluar = BarangKeluar::findOrFail($id);
-        
-        // Rollback stok (tambah kembali)
-        $this->updateInventarisRuangan(
-            $barangKeluar->id_barang,
-            $barangKeluar->id_ruangan,
-            $barangKeluar->jumlah,
-            'masuk'
-        );
 
-        // Hapus transaksi
+        $inventaris = InventarisRuangan::where([
+            'id_barang' => $barangKeluar->id_barang,
+            'id_ruangan' => $barangKeluar->id_ruangan,
+        ])->first();
+
+        if ($inventaris) {
+            if ($barangKeluar->jenis_keluar == 'rusak') {
+                $inventaris->stok_baik += $barangKeluar->jumlah;
+                $inventaris->stok_rusak -= $barangKeluar->jumlah;
+                if ($inventaris->stok_rusak < 0) $inventaris->stok_rusak = 0;
+            } else {
+                $inventaris->stok_baik += $barangKeluar->jumlah;
+                $inventaris->stok_hilang -= $barangKeluar->jumlah;
+                if ($inventaris->stok_hilang < 0) $inventaris->stok_hilang = 0;
+            }
+            $inventaris->save();
+        }
+
+        $barangId = $barangKeluar->id_barang;
         $barangKeluar->delete();
 
-        // Update stok_total
-        $this->updateStokTotal($barangKeluar->id_barang);
+        $this->updateStokTotal($barangId);
 
         return redirect()->route('barang-keluar.index')
             ->with('success', 'Barang keluar berhasil dihapus!');
     }
 
-    /**
-     * Update inventaris ruangan (tambah atau kurangi stok)
-     */
-    private function updateInventarisRuangan($barangId, $ruanganId, $jumlah, $jenis)
+    private function rollbackStok($barangId, $ruanganId, $jumlah, $jenis)
     {
-        // Cari data inventaris BAIK yang sesuai
         $inventaris = InventarisRuangan::where([
             'id_barang' => $barangId,
             'id_ruangan' => $ruanganId,
-            'kondisi' => 'BAIK'
         ])->first();
 
-        if ($jenis == 'masuk') {
-            // Tambah stok (rollback)
-            if ($inventaris) {
-                $inventaris->stok += $jumlah;
-                $inventaris->save();
+        if ($inventaris) {
+            if ($jenis == 'rusak') {
+                $inventaris->stok_baik += $jumlah;
+                $inventaris->stok_rusak -= $jumlah;
+                if ($inventaris->stok_rusak < 0) $inventaris->stok_rusak = 0;
+            } else {
+                $inventaris->stok_baik += $jumlah;
+                $inventaris->stok_hilang -= $jumlah;
+                if ($inventaris->stok_hilang < 0) $inventaris->stok_hilang = 0;
             }
-        } else {
-            // Kurangi stok (keluar)
-            if ($inventaris) {
-                $inventaris->stok -= $jumlah;
-                if ($inventaris->stok < 0) {
-                    $inventaris->stok = 0;
-                }
-                $inventaris->save();
-            }
+            $inventaris->save();
         }
     }
 
-    /**
-     * Update stok_total di tabel barang
-     */
     private function updateStokTotal($barangId)
     {
-        $totalStok = InventarisRuangan::where('id_barang', $barangId)->sum('stok');
+        $totalStok = InventarisRuangan::where('id_barang', $barangId)
+            ->selectRaw('SUM(stok_baik + stok_rusak + stok_hilang) as total')
+            ->value('total') ?? 0;
+
         Barang::where('id_barang', $barangId)->update(['stok_total' => $totalStok]);
     }
 }

@@ -1,36 +1,54 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Edit Ruangan</title>
-</head>
-<body>
-    <h1>Edit Ruangan</h1>
+@extends('layouts.app')
 
-    <div style="margin-bottom: 10px;">
-        <a href="{{ route('ruangan.index') }}">Kembali ke Daftar</a>
+@section('title', 'Edit Ruangan')
+
+@section('content')
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div>
+            <h1 style="color: #0f2b4a; font-size: 22px; margin-bottom: 4px;">✏️ Edit Ruangan</h1>
+            <p style="color: #6b7a8f; font-size: 14px;">Ubah informasi ruangan.</p>
+        </div>
     </div>
 
     @if($errors->any())
-        <div style="color: red; margin-bottom: 10px;">
-            <ul>
+        <div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 12px 16px; border-radius: 8px; margin-bottom: 18px; color: #991b1b;">
+            <ul style="list-style: none; padding: 0; margin: 0;">
                 @foreach($errors->all() as $error)
-                    <li>{{ $error }}</li>
+                    <li>• {{ $error }}</li>
                 @endforeach
             </ul>
         </div>
     @endif
 
-    <form action="{{ route('ruangan.update', $ruangan->id_ruangan) }}" method="POST">
+    <form action="{{ route('ruangan.update', $ruangan->id_ruangan) }}" method="POST" style="max-width: 600px;">
         @csrf
         @method('PUT')
-        <div>
-            <label>Nama Ruangan:</label><br>
-            <input type="text" name="nama_ruangan" value="{{ old('nama_ruangan', $ruangan->nama_ruangan) }}" required>
-            <br><small>Contoh: Ruang Kelas 1A, Laboratorium, Perpustakaan, Kantor Guru</small>
+
+        <div style="margin-bottom: 20px;">
+            <label for="nama_ruangan" style="display: block; font-weight: 600; color: #0f2b4a; margin-bottom: 6px; font-size: 14px;">
+                Nama Ruangan <span style="color: #dc2626;">*</span>
+            </label>
+            <input type="text" id="nama_ruangan" name="nama_ruangan" value="{{ old('nama_ruangan', $ruangan->nama_ruangan) }}" required
+                   style="width: 100%; padding: 10px 14px; border: 2px solid #dce3ed; border-radius: 8px; font-size: 14px; transition: all 0.3s ease; background: #f8fafc;">
+            <small style="color: #6b7a8f; font-size: 12px;">Contoh: Ruang Kelas 1A, Laboratorium, Perpustakaan, Kantor Guru</small>
         </div>
-        <br>
-        <button type="submit">Update</button>
-        <a href="{{ route('ruangan.index') }}">Batal</a>
+
+        <div style="margin-bottom: 25px;">
+            <label style="display: block; font-weight: 600; color: #0f2b4a; margin-bottom: 6px; font-size: 14px;">
+                Tanggal
+            </label>
+            <input type="text" value="{{ $ruangan->updated_at->format('d F Y') }}" disabled
+                   style="width: 100%; padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #f1f4f9; color: #6b7a8f;">
+            <small style="color: #6b7a8f; font-size: 12px;">Terakhir diupdate: {{ $ruangan->updated_at->format('d-m-Y H:i:s') }}</small>
+        </div>
+
+        <div style="display: flex; gap: 12px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
+            <a href="{{ route('ruangan.index') }}" style="padding: 10px 28px; border: 2px solid #dce3ed; border-radius: 8px; text-decoration: none; color: #4a5568; font-weight: 600; transition: all 0.3s; background: white; text-align: center;">
+                Batal
+            </a>
+            <button type="submit" style="padding: 10px 32px; background: #0f2b4a; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: background 0.3s;">
+                Simpan
+            </button>
+        </div>
     </form>
-</body>
-</html>
+@endsection

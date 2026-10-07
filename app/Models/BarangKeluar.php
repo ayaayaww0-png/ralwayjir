@@ -2,21 +2,22 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class BarangKeluar extends Model
 {
-    use HasFactory;
-
     protected $table = 'barang_keluars';
     protected $primaryKey = 'id_keluar';
-
     protected $fillable = [
         'tanggal',
         'id_barang',
         'id_ruangan',
         'jumlah',
+        'jenis_keluar'  // tambahkan ini
+    ];
+
+    protected $casts = [
+        'tanggal' => 'date',
     ];
 
     public function barang()

@@ -3,68 +3,105 @@
 <head>
     <title>Laporan Stok Barang</title>
     <style>
-        body { font-family: Arial, sans-serif; font-size: 12px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #000; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        h1 { text-align: center; }
-        .header { text-align: center; margin-bottom: 20px; }
-        .footer { text-align: center; margin-top: 20px; font-size: 10px; }
-        .habis { color: red; font-weight: bold; }
-        .menipis { color: orange; font-weight: bold; }
-        .aman { color: green; font-weight: bold; }
+        body {
+            font-family: 'Times New Roman', Times, serif;
+            font-size: 12px;
+            margin: 30px 40px;
+            padding: 0;
+        }
+        .kop { text-align: center; margin-bottom: 20px; }
+        .kop img { width: 100%; max-width: 750px; height: auto; }
+        .title { text-align: center; font-size: 16px; font-weight: bold; text-decoration: underline; margin-bottom: 4px; }
+        .subtitle { text-align: center; font-size: 12px; margin-bottom: 15px; }
+        .info-surat { margin-bottom: 12px; }
+        .info-surat .nomor { font-size: 12px; }
+        .info-surat .perihal { font-size: 12px; font-weight: bold; }
+        hr { border: 0.5px solid #000; margin: 6px 0; }
+        .content p { text-align: justify; margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11px; }
+        th, td { border: 1px solid #000; padding: 4px 8px; text-align: center; }
+        th { background-color: #f0f0f0; font-weight: bold; }
+        .text-left { text-align: left; }
+        .text-right { text-align: right; }
+        .footer { margin-top: 25px; text-align: center; font-size: 11px; border-top: 1px solid #ccc; padding-top: 8px; }
+        .footer .city-date { font-style: italic; }
+        .grand-total { background-color: #f0f0f0; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>LAPORAN STOK BARANG</h1>
-        <p>SMK NEGERI 2 PADANG PANJANG</p>
-        <p>Tanggal Cetak: {{ date('d-m-Y') }}</p>
+
+    <div class="kop">
+        <img src="{{ public_path('images/kop-surat.png') }}" alt="Kop Surat SMKN 2 Padang Panjang">
+    </div>
+
+    <div class="title">LAPORAN STOK BARANG</div>
+    <div class="subtitle">Sistem Inventaris Barang Sekolah</div>
+
+    <div class="info-surat">
+        <div class="nomor"><strong>Nomor :</strong> 800 / 576 / SMKN.02PP / VIII / 2026</div>
+        <div class="perihal"><strong>Perihal :</strong> Laporan Stok Barang</div>
         <hr>
     </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>No</th>
-                <th>Kode Barang</th>
-                <th>Nama Barang</th>
-                <th>Kategori</th>
-                <th>Stok Total</th>
-                <th>Min Stok</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            @forelse($barangs as $index => $barang)
+    <div class="content">
+        <p>Dengan hormat,</p>
+        <p>Berikut ini adalah data stok barang di SMKN 2 Padang Panjang per tanggal <strong>{{ Carbon\Carbon::now()->locale('id')->translatedFormat('d F Y') }}</strong>.</p>
+
+        @php
+            $grandTotal = 0;
+        @endphp
+
+        <table>
+            <thead>
                 <tr>
-                    <td>{{ $index + 1 }}</td>
-                    <td>{{ $barang->kode_barang }}</td>
-                    <td>{{ $barang->nama_barang }}</td>
-                    <td>{{ $barang->kategori->nama_kategori ?? '-' }}</td>
-                    <td>{{ $barang->stok_total }}</td>
-                    <td>{{ $barang->min_stok }}</td>
-                    <td>
-                        @if($barang->stok_total <= 0)
-                            <span class="habis">HABIS</span>
-                        @elseif($barang->stok_total <= $barang->min_stok)
-                            <span class="menipis">MENIPIS</span>
-                        @else
-                            <span class="aman">AMAN</span>
-                        @endif
-                    </td>
+                    <th style="width:4%">No</th>
+                    <th style="width:12%">Kode</th>
+                    <th style="width:15%" class="text-left">Nama Barang</th>
+                    <th style="width:15%" class="text-left">Kategori</th>
+                    <th style="width:7%">Stok</th>
+                    <th style="width:15%" class="text-right">Harga Satuan</th>
+                    <th style="width:17%" class="text-right">Total Nilai</th>
+                    <th style="width:10%">Status</th>
                 </tr>
-            @empty
-                <tr>
-                    <td colspan="7" style="text-align: center;">Tidak ada data.</td>
-                </tr>
-            @endforelse
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                @forelse($barangs as $index => $barang)
+                    @php
+                        $totalNilai = $barang->stok_total * $barang->harga;
+                        $grandTotal += $totalNilai;
+                    @endphp
+                    <tr>
+                        <td>{{ $index + 1 }}</td>
+                        <td>{{ $barang->kode_barang }}</td>
+                        <td class="text-left">{{ $barang->nama_barang }}</td>
+                        <td class="text-left">{{ $barang->kategori->nama_kategori ?? '-' }}</td>
+                        <td>{{ $barang->stok_total }}</td>
+                        <td class="text-right">Rp {{ number_format($barang->harga, 0, ',', '.') }}</td>
+                        <td class="text-right">Rp {{ number_format($totalNilai, 0, ',', '.') }}</td>
+                        <td>
+                            @if($barang->stok_total <= 0) HABIS
+                            @elseif($barang->stok_total <= $barang->min_stok) MENIPIS
+                            @else AMAN @endif
+                        </td>
+                    </tr>
+                @empty
+                    <tr><td colspan="8" style="text-align:center;">Tidak ada data.</td></tr>
+                @endforelse
+                @if($barangs->count() > 0)
+                    <tr class="grand-total">
+                        <td colspan="6" style="text-align:right;">TOTAL KESELURUHAN</td>
+                        <td class="text-right">Rp {{ number_format($grandTotal, 0, ',', '.') }}</td>
+                        <td></td>
+                    </tr>
+                @endif
+            </tbody>
+        </table>
+    </div>
 
     <div class="footer">
-        <p>Total Barang: {{ $barangs->count() }}</p>
-        <p>Dicetak oleh: SMK NEGERI 2 PADANG PANJANG</p>
+        <div class="city-date">Padang Panjang, {{ Carbon\Carbon::now()->locale('id')->translatedFormat('d F Y') }}</div>
+        <div style="margin-top:4px;">Dicetak oleh: Sistem Inventaris SMKN 2 Padang Panjang</div>
     </div>
+
 </body>
 </html>

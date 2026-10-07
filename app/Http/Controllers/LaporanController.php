@@ -30,7 +30,7 @@ class LaporanController extends Controller
     {
         $query = Barang::with('kategori');
 
-        // Filter by kategori
+        // Filter by kategori (KIB)
         if ($request->filled('kategori')) {
             $query->where('id_kategori', $request->kategori);
         }
@@ -58,9 +58,9 @@ class LaporanController extends Controller
         $barangs = $query->get();
         $kategoris = Kategori::all();
 
-        // Jika request cetak PDF
         if ($request->has('cetak_pdf')) {
             $pdf = Pdf::loadView('laporan.cetak.stok_barang', compact('barangs', 'kategoris'));
+            $pdf->setPaper('A4', 'portrait');
             return $pdf->download('laporan-stok-barang.pdf');
         }
 
@@ -72,7 +72,7 @@ class LaporanController extends Controller
      */
     public function inventarisRuangan(Request $request)
     {
-        $query = InventarisRuangan::with(['barang', 'ruangan', 'supplier']);
+        $query = InventarisRuangan::with(['barang', 'ruangan']);
 
         // Filter by ruangan
         if ($request->filled('ruangan')) {
@@ -81,7 +81,13 @@ class LaporanController extends Controller
 
         // Filter by kondisi
         if ($request->filled('kondisi')) {
-            $query->where('kondisi', $request->kondisi);
+            if ($request->kondisi == 'BAIK') {
+                $query->where('stok_baik', '>', 0);
+            } elseif ($request->kondisi == 'RUSAK') {
+                $query->where('stok_rusak', '>', 0);
+            } elseif ($request->kondisi == 'HILANG') {
+                $query->where('stok_hilang', '>', 0);
+            }
         }
 
         $inventaris = $query->get();
@@ -89,6 +95,7 @@ class LaporanController extends Controller
 
         if ($request->has('cetak_pdf')) {
             $pdf = Pdf::loadView('laporan.cetak.inventaris_ruangan', compact('inventaris', 'ruangans'));
+            $pdf->setPaper('A4', 'portrait');
             return $pdf->download('laporan-inventaris-ruangan.pdf');
         }
 
@@ -126,6 +133,7 @@ class LaporanController extends Controller
 
         if ($request->has('cetak_pdf')) {
             $pdf = Pdf::loadView('laporan.cetak.barang_masuk', compact('barangMasuks', 'suppliers', 'ruangans'));
+            $pdf->setPaper('A4', 'portrait');
             return $pdf->download('laporan-barang-masuk.pdf');
         }
 
@@ -157,6 +165,7 @@ class LaporanController extends Controller
 
         if ($request->has('cetak_pdf')) {
             $pdf = Pdf::loadView('laporan.cetak.barang_keluar', compact('barangKeluars', 'ruangans'));
+            $pdf->setPaper('A4', 'portrait');
             return $pdf->download('laporan-barang-keluar.pdf');
         }
 
@@ -193,6 +202,7 @@ class LaporanController extends Controller
 
         if ($request->has('cetak_pdf')) {
             $pdf = Pdf::loadView('laporan.cetak.mutasi_barang', compact('mutasiBarangs', 'ruangans'));
+            $pdf->setPaper('A4', 'portrait');
             return $pdf->download('laporan-mutasi-barang.pdf');
         }
 

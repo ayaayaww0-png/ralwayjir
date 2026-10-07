@@ -8,9 +8,24 @@ class Barang extends Model
 {
     protected $table = 'barangs';
     protected $primaryKey = 'id_barang';
-    protected $fillable = ['kode_barang', 'nama_barang', 'id_kategori', 'stok_total', 'min_stok'];
+    protected $fillable = [
+        'kode_barang',
+        'nama_barang',
+        'id_kategori',
+        'stok_total',
+        'min_stok',
+        'harga',
+        'merk',
+        'no_seri',
+        'register',
+        'luas',
+        'tahun',
+        'lokasi',
+        'status_tanah',
+        'kode_tanah',
+        'asal_usul',
+    ];
 
-    // Relasi ke kategori
     public function kategori()
     {
         return $this->belongsTo(Kategori::class, 'id_kategori', 'id_kategori');
@@ -36,7 +51,11 @@ class Barang extends Model
         return $this->hasMany(MutasiBarang::class, 'id_barang', 'id_barang');
     }
 
-    // Accessor untuk mengecek stok hampir habis
+    public function kibCGedung()
+    {
+        return $this->hasOne(KIBCGedung::class, 'id_barang', 'id_barang');
+    }
+
     public function getIsStokMenipisAttribute()
     {
         return $this->stok_total <= $this->min_stok;

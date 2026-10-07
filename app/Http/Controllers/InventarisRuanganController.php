@@ -5,121 +5,106 @@ namespace App\Http\Controllers;
 use App\Models\InventarisRuangan;
 use App\Models\Barang;
 use App\Models\Ruangan;
-use App\Models\Supplier;
+use App\Models\Kategori;
 use Illuminate\Http\Request;
 
 class InventarisRuanganController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
-        $inventaris = InventarisRuangan::with(['barang', 'ruangan', 'supplier'])->get();
+        $inventaris = InventarisRuangan::with(['barang', 'ruangan'])->get();
         return view('inventaris.index', compact('inventaris'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
-        $barangs = Barang::all();
+        // Ambil hanya barang dari KIB B
+        $kategori = Kategori::where('nama_kategori', 'KIB B (Peralatan & Mesin)')->first();
+        $barangs = Barang::where('id_kategori', $kategori->id_kategori ?? 0)->get();
         $ruangans = Ruangan::all();
-        $suppliers = Supplier::all();
-        return view('inventaris.create', compact('barangs', 'ruangans', 'suppliers'));
+        return view('inventaris.create', compact('barangs', 'ruangans'));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         $request->validate([
             'id_barang' => 'required|exists:barangs,id_barang',
             'id_ruangan' => 'required|exists:ruangans,id_ruangan',
-            'id_supplier' => 'required|exists:suppliers,id_supplier',
-            'stok' => 'required|integer|min:0',
-            'kondisi' => 'required|in:BAIK,RUSAK,HILANG'
+            'stok_baik' => 'required|integer|min:0',
+            'stok_rusak' => 'required|integer|min:0',
+            'stok_hilang' => 'required|integer|min:0',
         ]);
 
-        // Cek apakah sudah ada data dengan kombinasi barang + ruangan + supplier + kondisi yang sama
+        // Cek apakah barang KIB B
+        $barang = Barang::find($request->id_barang);
+        $kategori = Kategori::find($barang->id_kategori);
+        if (!str_contains($kategori->nama_kategori, 'KIB B')) {
+            return redirect()->back()
+                ->with('error', 'Hanya barang KIB B (Peralatan & Mesin) yang bisa ditambahkan ke inventaris ruangan!')
+                ->withInput();
+        }
+
+        // Cek duplikat
         $existing = InventarisRuangan::where([
             'id_barang' => $request->id_barang,
             'id_ruangan' => $request->id_ruangan,
-            'id_supplier' => $request->id_supplier,
-            'kondisi' => $request->kondisi
         ])->first();
 
         if ($existing) {
             return redirect()->back()
-                ->with('error', 'Data inventaris sudah ada! Silakan edit atau tambah dengan kondisi berbeda.')
+                ->with('error', 'Data inventaris sudah ada! Silakan edit.')
                 ->withInput();
         }
 
-        InventarisRuangan::create($request->all());
+        $inventaris = InventarisRuangan::create([
+            'id_barang' => $request->id_barang,
+            'id_ruangan' => $request->id_ruangan,
+            'stok_baik' => $request->stok_baik,
+            'stok_rusak' => $request->stok_rusak,
+            'stok_hilang' => $request->stok_hilang,
+        ]);
 
-        // Update stok_total di tabel barang
         $this->updateStokTotal($request->id_barang);
 
         return redirect()->route('inventaris.index')
             ->with('success', 'Inventaris ruangan berhasil ditambahkan!');
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show($id)
     {
-        $inventaris = InventarisRuangan::with(['barang', 'ruangan', 'supplier'])->findOrFail($id);
+        $inventaris = InventarisRuangan::with(['barang', 'ruangan'])->findOrFail($id);
         return view('inventaris.show', compact('inventaris'));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit($id)
     {
         $inventaris = InventarisRuangan::findOrFail($id);
         $barangs = Barang::all();
         $ruangans = Ruangan::all();
-        $suppliers = Supplier::all();
-        return view('inventaris.edit', compact('inventaris', 'barangs', 'ruangans', 'suppliers'));
+        return view('inventaris.edit', compact('inventaris', 'barangs', 'ruangans'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, $id)
     {
         $request->validate([
             'id_barang' => 'required|exists:barangs,id_barang',
             'id_ruangan' => 'required|exists:ruangans,id_ruangan',
-            'id_supplier' => 'required|exists:suppliers,id_supplier',
-            'stok' => 'required|integer|min:0',
-            'kondisi' => 'required|in:BAIK,RUSAK,HILANG'
+            'stok_baik' => 'required|integer|min:0',
+            'stok_rusak' => 'required|integer|min:0',
+            'stok_hilang' => 'required|integer|min:0',
         ]);
 
         $inventaris = InventarisRuangan::findOrFail($id);
-        
-        // Cek apakah ada duplikat (kecuali data sendiri)
-        $existing = InventarisRuangan::where([
+        $oldBarangId = $inventaris->id_barang;
+
+        $inventaris->update([
             'id_barang' => $request->id_barang,
             'id_ruangan' => $request->id_ruangan,
-            'id_supplier' => $request->id_supplier,
-            'kondisi' => $request->kondisi
-        ])->where('id_inventaris', '!=', $id)->first();
+            'stok_baik' => $request->stok_baik,
+            'stok_rusak' => $request->stok_rusak,
+            'stok_hilang' => $request->stok_hilang,
+        ]);
 
-        if ($existing) {
-            return redirect()->back()
-                ->with('error', 'Data inventaris sudah ada! Silakan pilih kombinasi yang berbeda.')
-                ->withInput();
-        }
-
-        $oldBarangId = $inventaris->id_barang;
-        $inventaris->update($request->all());
-
-        // Update stok_total di tabel barang (lama dan baru)
         $this->updateStokTotal($oldBarangId);
         if ($oldBarangId != $request->id_barang) {
             $this->updateStokTotal($request->id_barang);
@@ -129,29 +114,24 @@ class InventarisRuanganController extends Controller
             ->with('success', 'Inventaris ruangan berhasil diupdate!');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy($id)
     {
         $inventaris = InventarisRuangan::findOrFail($id);
         $barangId = $inventaris->id_barang;
-        
         $inventaris->delete();
 
-        // Update stok_total di tabel barang
         $this->updateStokTotal($barangId);
 
         return redirect()->route('inventaris.index')
             ->with('success', 'Inventaris ruangan berhasil dihapus!');
     }
 
-    /**
-     * Update stok_total di tabel barang berdasarkan total stok di inventaris_ruangan
-     */
     private function updateStokTotal($barangId)
     {
-        $totalStok = InventarisRuangan::where('id_barang', $barangId)->sum('stok');
-        \App\Models\Barang::where('id_barang', $barangId)->update(['stok_total' => $totalStok]);
+        $totalStok = InventarisRuangan::where('id_barang', $barangId)
+            ->selectRaw('SUM(stok_baik + stok_rusak + stok_hilang) as total')
+            ->value('total') ?? 0;
+
+        Barang::where('id_barang', $barangId)->update(['stok_total' => $totalStok]);
     }
 }

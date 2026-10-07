@@ -6,14 +6,12 @@ use App\Models\MutasiBarang;
 use App\Models\Barang;
 use App\Models\Ruangan;
 use App\Models\InventarisRuangan;
+use App\Models\Kategori;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
 class MutasiBarangController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
         $mutasiBarangs = MutasiBarang::with(['barang', 'ruanganAsal', 'ruanganTujuan'])
@@ -22,19 +20,15 @@ class MutasiBarangController extends Controller
         return view('mutasi_barang.index', compact('mutasiBarangs'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
-        $barangs = Barang::all();
+        // Ambil hanya barang dari KIB B
+        $kategori = Kategori::where('nama_kategori', 'KIB B (Peralatan & Mesin)')->first();
+        $barangs = Barang::where('id_kategori', $kategori->id_kategori ?? 0)->get();
         $ruangans = Ruangan::all();
         return view('mutasi_barang.create', compact('barangs', 'ruangans'));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         $request->validate([
@@ -42,19 +36,19 @@ class MutasiBarangController extends Controller
             'id_barang' => 'required|exists:barangs,id_barang',
             'id_ruangan_asal' => 'required|exists:ruangans,id_ruangan|different:id_ruangan_tujuan',
             'id_ruangan_tujuan' => 'required|exists:ruangans,id_ruangan',
-            'jumlah' => 'required|integer|min:1'
+            'jumlah' => 'required|integer|min:1',
         ]);
 
         // Cek stok di ruangan asal
-        $stokTersedia = InventarisRuangan::where([
+        $inventarisAsal = InventarisRuangan::where([
             'id_barang' => $request->id_barang,
             'id_ruangan' => $request->id_ruangan_asal,
-            'kondisi' => 'BAIK'
-        ])->sum('stok');
+        ])->first();
 
-        if ($stokTersedia < $request->jumlah) {
+        if (!$inventarisAsal || $inventarisAsal->stok_baik < $request->jumlah) {
+            $stokTersedia = $inventarisAsal->stok_baik ?? 0;
             return redirect()->back()
-                ->with('error', 'Stok tidak mencukupi! Stok tersedia di ruangan asal: ' . $stokTersedia)
+                ->with('error', "Stok BAIK di ruangan asal tidak mencukupi! Stok tersedia: {$stokTersedia}")
                 ->withInput();
         }
 
@@ -64,10 +58,10 @@ class MutasiBarangController extends Controller
             'id_barang' => $request->id_barang,
             'id_ruangan_asal' => $request->id_ruangan_asal,
             'id_ruangan_tujuan' => $request->id_ruangan_tujuan,
-            'jumlah' => $request->jumlah
+            'jumlah' => $request->jumlah,
         ]);
 
-        // Update stok di inventaris ruangan (asal dikurangi, tujuan ditambah)
+        // Proses mutasi stok
         $this->mutasiStok(
             $request->id_barang,
             $request->id_ruangan_asal,
@@ -82,18 +76,12 @@ class MutasiBarangController extends Controller
             ->with('success', 'Mutasi barang berhasil dicatat!');
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show($id)
     {
         $mutasiBarang = MutasiBarang::with(['barang', 'ruanganAsal', 'ruanganTujuan'])->findOrFail($id);
         return view('mutasi_barang.show', compact('mutasiBarang'));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit($id)
     {
         $mutasiBarang = MutasiBarang::findOrFail($id);
@@ -102,9 +90,6 @@ class MutasiBarangController extends Controller
         return view('mutasi_barang.edit', compact('mutasiBarang', 'barangs', 'ruangans'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, $id)
     {
         $request->validate([
@@ -112,12 +97,11 @@ class MutasiBarangController extends Controller
             'id_barang' => 'required|exists:barangs,id_barang',
             'id_ruangan_asal' => 'required|exists:ruangans,id_ruangan|different:id_ruangan_tujuan',
             'id_ruangan_tujuan' => 'required|exists:ruangans,id_ruangan',
-            'jumlah' => 'required|integer|min:1'
+            'jumlah' => 'required|integer|min:1',
         ]);
 
         $mutasiBarang = MutasiBarang::findOrFail($id);
-        
-        // Simpan data lama untuk rollback
+
         $oldBarangId = $mutasiBarang->id_barang;
         $oldAsalId = $mutasiBarang->id_ruangan_asal;
         $oldTujuanId = $mutasiBarang->id_ruangan_tujuan;
@@ -127,17 +111,17 @@ class MutasiBarangController extends Controller
         $this->rollbackMutasi($oldBarangId, $oldAsalId, $oldTujuanId, $oldJumlah);
 
         // Cek stok baru di ruangan asal
-        $stokTersedia = InventarisRuangan::where([
+        $inventarisBaru = InventarisRuangan::where([
             'id_barang' => $request->id_barang,
             'id_ruangan' => $request->id_ruangan_asal,
-            'kondisi' => 'BAIK'
-        ])->sum('stok');
+        ])->first();
 
-        if ($stokTersedia < $request->jumlah) {
+        if (!$inventarisBaru || $inventarisBaru->stok_baik < $request->jumlah) {
             // Rollback lagi (kembalikan ke kondisi semula)
             $this->mutasiStok($oldBarangId, $oldAsalId, $oldTujuanId, $oldJumlah);
+            $stokTersedia = $inventarisBaru->stok_baik ?? 0;
             return redirect()->back()
-                ->with('error', 'Stok tidak mencukupi! Stok tersedia di ruangan asal: ' . $stokTersedia)
+                ->with('error', "Stok BAIK di ruangan asal tidak mencukupi! Stok tersedia: {$stokTersedia}")
                 ->withInput();
         }
 
@@ -147,7 +131,7 @@ class MutasiBarangController extends Controller
             'id_barang' => $request->id_barang,
             'id_ruangan_asal' => $request->id_ruangan_asal,
             'id_ruangan_tujuan' => $request->id_ruangan_tujuan,
-            'jumlah' => $request->jumlah
+            'jumlah' => $request->jumlah,
         ]);
 
         // Proses mutasi baru
@@ -158,7 +142,7 @@ class MutasiBarangController extends Controller
             $request->jumlah
         );
 
-        // Update stok_total kedua barang (lama dan baru)
+        // Update stok_total
         $this->updateStokTotal($oldBarangId);
         if ($oldBarangId != $request->id_barang) {
             $this->updateStokTotal($request->id_barang);
@@ -168,13 +152,10 @@ class MutasiBarangController extends Controller
             ->with('success', 'Mutasi barang berhasil diupdate!');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy($id)
     {
         $mutasiBarang = MutasiBarang::findOrFail($id);
-        
+
         // Rollback mutasi
         $this->rollbackMutasi(
             $mutasiBarang->id_barang,
@@ -183,33 +164,27 @@ class MutasiBarangController extends Controller
             $mutasiBarang->jumlah
         );
 
-        // Hapus transaksi
+        $barangId = $mutasiBarang->id_barang;
         $mutasiBarang->delete();
 
         // Update stok_total
-        $this->updateStokTotal($mutasiBarang->id_barang);
+        $this->updateStokTotal($barangId);
 
         return redirect()->route('mutasi-barang.index')
             ->with('success', 'Mutasi barang berhasil dihapus!');
     }
 
-    /**
-     * Proses mutasi stok (asal dikurangi, tujuan ditambah)
-     */
     private function mutasiStok($barangId, $asalId, $tujuanId, $jumlah)
     {
         // Kurangi stok di ruangan asal
         $inventarisAsal = InventarisRuangan::where([
             'id_barang' => $barangId,
             'id_ruangan' => $asalId,
-            'kondisi' => 'BAIK'
         ])->first();
 
         if ($inventarisAsal) {
-            $inventarisAsal->stok -= $jumlah;
-            if ($inventarisAsal->stok < 0) {
-                $inventarisAsal->stok = 0;
-            }
+            $inventarisAsal->stok_baik -= $jumlah;
+            if ($inventarisAsal->stok_baik < 0) $inventarisAsal->stok_baik = 0;
             $inventarisAsal->save();
         }
 
@@ -217,47 +192,33 @@ class MutasiBarangController extends Controller
         $inventarisTujuan = InventarisRuangan::where([
             'id_barang' => $barangId,
             'id_ruangan' => $tujuanId,
-            'kondisi' => 'BAIK'
         ])->first();
 
         if ($inventarisTujuan) {
-            $inventarisTujuan->stok += $jumlah;
+            $inventarisTujuan->stok_baik += $jumlah;
             $inventarisTujuan->save();
         } else {
             // Buat baru jika belum ada di ruangan tujuan
-            // Cari supplier dari ruangan asal
-            $supplierAsal = InventarisRuangan::where([
+            InventarisRuangan::create([
                 'id_barang' => $barangId,
-                'id_ruangan' => $asalId,
-                'kondisi' => 'BAIK'
-            ])->value('id_supplier');
-
-            if ($supplierAsal) {
-                InventarisRuangan::create([
-                    'id_barang' => $barangId,
-                    'id_ruangan' => $tujuanId,
-                    'id_supplier' => $supplierAsal,
-                    'stok' => $jumlah,
-                    'kondisi' => 'BAIK'
-                ]);
-            }
+                'id_ruangan' => $tujuanId,
+                'stok_baik' => $jumlah,
+                'stok_rusak' => 0,
+                'stok_hilang' => 0,
+            ]);
         }
     }
 
-    /**
-     * Rollback mutasi (kebalikan dari mutasiStok)
-     */
     private function rollbackMutasi($barangId, $asalId, $tujuanId, $jumlah)
     {
         // Tambah kembali stok di ruangan asal
         $inventarisAsal = InventarisRuangan::where([
             'id_barang' => $barangId,
             'id_ruangan' => $asalId,
-            'kondisi' => 'BAIK'
         ])->first();
 
         if ($inventarisAsal) {
-            $inventarisAsal->stok += $jumlah;
+            $inventarisAsal->stok_baik += $jumlah;
             $inventarisAsal->save();
         }
 
@@ -265,24 +226,21 @@ class MutasiBarangController extends Controller
         $inventarisTujuan = InventarisRuangan::where([
             'id_barang' => $barangId,
             'id_ruangan' => $tujuanId,
-            'kondisi' => 'BAIK'
         ])->first();
 
         if ($inventarisTujuan) {
-            $inventarisTujuan->stok -= $jumlah;
-            if ($inventarisTujuan->stok < 0) {
-                $inventarisTujuan->stok = 0;
-            }
+            $inventarisTujuan->stok_baik -= $jumlah;
+            if ($inventarisTujuan->stok_baik < 0) $inventarisTujuan->stok_baik = 0;
             $inventarisTujuan->save();
         }
     }
 
-    /**
-     * Update stok_total di tabel barang
-     */
     private function updateStokTotal($barangId)
     {
-        $totalStok = InventarisRuangan::where('id_barang', $barangId)->sum('stok');
+        $totalStok = InventarisRuangan::where('id_barang', $barangId)
+            ->selectRaw('SUM(stok_baik + stok_rusak + stok_hilang) as total')
+            ->value('total') ?? 0;
+
         Barang::where('id_barang', $barangId)->update(['stok_total' => $totalStok]);
     }
 }

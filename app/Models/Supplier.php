@@ -10,10 +10,11 @@ class Supplier extends Model
     protected $primaryKey = 'id_supplier';
     protected $fillable = ['nama_supplier'];
 
-    public function inventarisRuangan()
-    {
-        return $this->hasMany(InventarisRuangan::class, 'id_supplier', 'id_supplier');
-    }
+    // HAPUS relasi ini karena sudah tidak ada id_supplier di inventaris_ruangans
+    // public function inventarisRuangan()
+    // {
+    //     return $this->hasMany(InventarisRuangan::class, 'id_supplier', 'id_supplier');
+    // }
 
     public function barangMasuk()
     {

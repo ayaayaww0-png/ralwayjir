@@ -20,7 +20,7 @@ class DashboardController extends Controller
         $totalKategori = Kategori::count();
         $totalRuangan = Ruangan::count();
 
-        // Barang stok menipis (stok <= min_stok)
+        // Barang stok menipis (stok_total <= min_stok)
         $stokMenipis = Barang::whereRaw('stok_total <= min_stok')->get();
         $totalStokMenipis = $stokMenipis->count();
 
@@ -35,10 +35,10 @@ class DashboardController extends Controller
             ];
         }
 
-        // 3. KONDISI BARANG
-        $kondisiBaik = InventarisRuangan::where('kondisi', 'BAIK')->sum('stok');
-        $kondisiRusak = InventarisRuangan::where('kondisi', 'RUSAK')->sum('stok');
-        $kondisiHilang = InventarisRuangan::where('kondisi', 'HILANG')->sum('stok');
+        // 3. KONDISI BARANG (pakai stok_baik, stok_rusak, stok_hilang)
+        $kondisiBaik = InventarisRuangan::sum('stok_baik');
+        $kondisiRusak = InventarisRuangan::sum('stok_rusak');
+        $kondisiHilang = InventarisRuangan::sum('stok_hilang');
 
         // 4. TRANSAKSI TERBARU (gabungan 3 tabel)
         $barangMasuk = BarangMasuk::with(['barang', 'ruangan', 'supplier'])
