@@ -3,9 +3,83 @@
 @section('title', 'Dashboard - Sistem Inventaris')
 
 @section('content')
+    <style>
+        /* ===== STATISTIK GRID ===== */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        /* ===== 2 KOLOM GRID ===== */
+        .two-col-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        /* ===== RESPONSIVE: TABLET & HP ===== */
+        @media (max-width: 768px) {
+            .stat-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
+
+            .stat-grid > div {
+                padding: 15px !important;
+            }
+
+            .stat-grid > div > div:first-child {
+                font-size: 24px !important;
+            }
+
+            .stat-grid > div > div:last-child {
+                font-size: 12px;
+            }
+
+            .two-col-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stat-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .stat-grid > div {
+                padding: 12px !important;
+            }
+
+            .stat-grid > div > div:first-child {
+                font-size: 20px !important;
+            }
+
+            .stat-grid > div > div:last-child {
+                font-size: 11px;
+            }
+        }
+
+        /* ===== TABEL RESPONSIVE ===== */
+        .table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .table-wrapper table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            min-width: 500px;
+        }
+    </style>
+
     {{-- STATISTIK --}}
-    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 25px;">
-        <div style="background: #dbeafe; padding: 20px; border-radius: 12px; text-align: center;">
+    <div class="stat-grid">
+        <div style="background: hsl(214, 95%, 93%); padding: 20px; border-radius: 12px; text-align: center;">
             <div style="font-size: 30px; font-weight: 700; color: #1e40af;">{{ $totalBarang }}</div>
             <div style="color: #1e40af; font-weight: 500;">Total Barang</div>
         </div>
@@ -40,7 +114,7 @@
     </div>
 
     {{-- 2 KOLOM: STOK PER KATEGORI & KONDISI BARANG --}}
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div class="two-col-grid">
         {{-- STOK PER KATEGORI --}}
         <div style="background: #f8fafc; padding: 20px; border-radius: 12px;">
             <h3 style="color: #0f2b4a; margin-bottom: 15px;">📊 STOK PER KATEGORI</h3>
@@ -63,9 +137,6 @@
         {{-- KONDISI BARANG --}}
         <div style="background: #f8fafc; padding: 20px; border-radius: 12px;">
             <h3 style="color: #0f2b4a; margin-bottom: 15px;">📊 KONDISI BARANG</h3>
-            @php
-                $totalKondisi = $kondisiBaik + $kondisiRusak + $kondisiHilang;
-            @endphp
             <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e2e8f0;">
                 <span style="color: green;">✅ BAIK</span>
                 <span style="font-weight: 600; color: green;">{{ $kondisiBaik }}</span>
@@ -85,8 +156,8 @@
     <div style="margin-top: 25px; background: #f8fafc; padding: 20px; border-radius: 12px;">
         <h3 style="color: #0f2b4a; margin-bottom: 15px;">📋 Transaksi Terbaru</h3>
         @if($transaksiTerbaru->count() > 0)
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <div class="table-wrapper">
+                <table>
                     <thead>
                         <tr style="background: #f1f4f9;">
                             <th style="padding: 8px 12px; text-align: left;">Tanggal</th>
